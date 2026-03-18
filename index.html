@@ -820,7 +820,7 @@ async function generateStory() {
   },2500);
 
   const words = state.durationMin * WPM;
-  const maxTokens = Math.min(8000, Math.max(2000, Math.ceil(words * 1.8)));
+  const maxTokens = Math.min(16000, Math.max(4000, Math.ceil(words * 3)));
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages',{
@@ -838,8 +838,11 @@ async function generateStory() {
     }
     const data = await resp.json();
     const text = data.content?.map(b=>b.text||'').join('') || '';
-    const clean = text.replace(/```json|```/g,'').replace(/^[^{]*/,'').replace(/[^}]*$/,'').trim();
-    const parsed = JSON.parse(clean);
+    console.log('STOP REASON:', data.stop_reason);
+    console.log('RAW (primeros 800 chars):', text.substring(0, 800));
+    console.log('RAW (últimos 300 chars):', text.substring(text.length - 300));
+    const parsed = robustJSONParse(text);
+    if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.story = parsed;
     renderStory(parsed);
     document.getElementById('btnGenEx').disabled=false;
@@ -872,7 +875,7 @@ async function generateExercises() {
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-6',
+        model:'claude-sonnet-4-5',
         max_tokens:6000,
         messages:[{role:'user',content:buildExercisesPrompt()}]
       })
@@ -880,8 +883,8 @@ async function generateExercises() {
     if (!resp.ok) { const e=await resp.json(); throw new Error(e.error?.message||`HTTP ${resp.status}`); }
     const data = await resp.json();
     const text = data.content?.map(b=>b.text||'').join('') || '';
-    const clean = text.replace(/```json|```/g,'').replace(/^[^{]*/,'').replace(/[^}]*$/,'').trim();
-    const parsed = JSON.parse(clean);
+    const parsed = robustJSONParse(text);
+    if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.exercises = parsed;
     renderExercises(parsed);
     showToast('✅ Ejercicios generados');
@@ -1272,6 +1275,56 @@ function showToast(msg, type='success') {
   t.className = 'show ' + type;
   clearTimeout(t._timeout);
   t._timeout = setTimeout(()=>{ t.className=''; }, 3500);
+}
+
+// ═══════════════════════════════════════════════
+// ROBUST JSON PARSER
+// ═══════════════════════════════════════════════
+function robustJSONParse(text) {
+  // 1. Limpieza básica
+  let clean = text.replace(/```json|```/g,'').trim();
+
+  // 2. Extraer desde el primer { hasta el último }
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start === -1 || end === -1) return null;
+  clean = clean.substring(start, end + 1);
+
+  // 3. Intento directo
+  try { return JSON.parse(clean); } catch(e) {}
+
+  // 4. Reparar caracteres de control dentro de strings
+  clean = clean.replace(/[\u0000-\u001F\u007F]/g, c => {
+    const map = {'\n':'\\n','\r':'\\r','\t':'\\t'};
+    return map[c] || '';
+  });
+  try { return JSON.parse(clean); } catch(e) {}
+
+  // 5. Reparar comillas sin escapar dentro de valores de string
+  clean = clean.replace(/"((?:[^"\\]|\\.)*)"/g, (match, inner) => {
+    const fixed = inner.replace(/(?<!\\)"/g, '\\"');
+    return `"${fixed}"`;
+  });
+  try { return JSON.parse(clean); } catch(e) {}
+
+  // 6. Truncar JSON incompleto — cerrar arrays y objetos abiertos
+  try {
+    let depth = 0; let inStr = false; let lastGoodPos = 0;
+    for (let i = 0; i < clean.length; i++) {
+      const c = clean[i];
+      if (c === '"' && clean[i-1] !== '\\') inStr = !inStr;
+      if (!inStr) {
+        if (c === '{' || c === '[') depth++;
+        if (c === '}' || c === ']') { depth--; if (depth === 0) lastGoodPos = i; }
+      }
+    }
+    if (lastGoodPos > 0) {
+      const truncated = clean.substring(0, lastGoodPos + 1);
+      return JSON.parse(truncated);
+    }
+  } catch(e) {}
+
+  return null;
 }
 
 // ═══════════════════════════════════════════════
