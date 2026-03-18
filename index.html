@@ -1281,10 +1281,7 @@ function showToast(msg, type='success') {
 // ROBUST JSON PARSER
 // ═══════════════════════════════════════════════
 function robustJSONParse(text) {
-  // Limpiar markdown
   let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-
-  // Extraer bloque JSON
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
   if (start === -1 || end === -1) return null;
@@ -1293,65 +1290,74 @@ function robustJSONParse(text) {
   // Intento 1: directo
   try { return JSON.parse(clean); } catch(e) {}
 
-  // Intento 2: escapar saltos de línea reales dentro de strings
-  try {
-    const fixed = fixNewlinesInStrings(clean);
-    return JSON.parse(fixed);
-  } catch(e) {}
+  // Intento 2: escapar correctamente los caracteres problemáticos dentro de strings
+  try { return JSON.parse(fixControlChars(clean)); } catch(e) {}
 
-  // Intento 3: eliminar caracteres de control
+  // Intento 3: cerrar JSON truncado y luego fixear
   try {
-    const fixed = clean.replace(/[\u0000-\u0009\u000B\u000C\u000E-\u001F]/g,'');
-    return JSON.parse(fixed);
-  } catch(e) {}
-
-  // Intento 4: cerrar JSON truncado
-  try {
-    const fixed = closeOpenJSON(clean);
-    if (fixed) return JSON.parse(fixed);
+    const closed = closeJSON(clean);
+    if (closed) return JSON.parse(fixControlChars(closed));
   } catch(e) {}
 
   return null;
 }
 
-function fixNewlinesInStrings(json) {
+function fixControlChars(json) {
   let result = '';
   let inString = false;
+  let escaped = false;
+
   for (let i = 0; i < json.length; i++) {
     const c = json[i];
-    if (c === '"' && json[i-1] !== '\\') {
+
+    if (escaped) {
+      escaped = false;
+      result += c;
+      continue;
+    }
+
+    if (c === '\\' && inString) {
+      escaped = true;
+      result += c;
+      continue;
+    }
+
+    if (c === '"') {
       inString = !inString;
       result += c;
-    } else if (inString && c === '\n') {
-      result += '\\n';
-    } else if (inString && c === '\r') {
-      result += '\\r';
-    } else if (inString && c === '\t') {
-      result += '\\t';
-    } else {
-      result += c;
+      continue;
     }
+
+    if (inString) {
+      if      (c === '\n') { result += '\\n';  continue; }
+      else if (c === '\r') { result += '\\r';  continue; }
+      else if (c === '\t') { result += '\\t';  continue; }
+      else if (c.charCodeAt(0) < 32) { continue; } // descartar otros ctrl chars
+    }
+
+    result += c;
   }
   return result;
 }
 
-function closeOpenJSON(json) {
-  let depth = 0;
-  let inStr = false;
+function closeJSON(json) {
+  let inStr = false; let escaped = false;
   let lastComplete = -1;
   const stack = [];
   for (let i = 0; i < json.length; i++) {
     const c = json[i];
-    if (c === '"' && json[i-1] !== '\\') inStr = !inStr;
+    if (escaped) { escaped = false; continue; }
+    if (c === '\\' && inStr) { escaped = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
     if (inStr) continue;
-    if (c === '{' || c === '[') { stack.push(c); depth++; }
-    if (c === '}' || c === ']') { stack.pop(); depth--; if (depth===0) lastComplete=i; }
+    if (c === '{' || c === '[') stack.push(c);
+    if (c === '}' || c === ']') {
+      stack.pop();
+      if (stack.length === 0) lastComplete = i;
+    }
   }
   if (lastComplete > 0) return json.substring(0, lastComplete + 1);
-  if (stack.length > 0) {
-    let closing = stack.reverse().map(c => c==='{' ? '}' : ']').join('');
-    return json + closing;
-  }
+  if (stack.length > 0) return json + stack.reverse().map(c => c==='{' ? '}' : ']').join('');
   return null;
 }
 
