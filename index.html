@@ -1281,51 +1281,80 @@ function showToast(msg, type='success') {
 // ROBUST JSON PARSER
 // ═══════════════════════════════════════════════
 function robustJSONParse(text) {
-  // 1. Limpieza básica
-  let clean = text.replace(/```json|```/g,'').trim();
+  // Limpiar markdown
+  let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
 
-  // 2. Extraer desde el primer { hasta el último }
+  // Extraer bloque JSON
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
   if (start === -1 || end === -1) return null;
   clean = clean.substring(start, end + 1);
 
-  // 3. Intento directo
+  // Intento 1: directo
   try { return JSON.parse(clean); } catch(e) {}
 
-  // 4. Reparar caracteres de control dentro de strings
-  clean = clean.replace(/[\u0000-\u001F\u007F]/g, c => {
-    const map = {'\n':'\\n','\r':'\\r','\t':'\\t'};
-    return map[c] || '';
-  });
-  try { return JSON.parse(clean); } catch(e) {}
-
-  // 5. Reparar comillas sin escapar dentro de valores de string
-  clean = clean.replace(/"((?:[^"\\]|\\.)*)"/g, (match, inner) => {
-    const fixed = inner.replace(/(?<!\\)"/g, '\\"');
-    return `"${fixed}"`;
-  });
-  try { return JSON.parse(clean); } catch(e) {}
-
-  // 6. Truncar JSON incompleto — cerrar arrays y objetos abiertos
+  // Intento 2: escapar saltos de línea reales dentro de strings
   try {
-    let depth = 0; let inStr = false; let lastGoodPos = 0;
-    for (let i = 0; i < clean.length; i++) {
-      const c = clean[i];
-      if (c === '"' && clean[i-1] !== '\\') inStr = !inStr;
-      if (!inStr) {
-        if (c === '{' || c === '[') depth++;
-        if (c === '}' || c === ']') { depth--; if (depth === 0) lastGoodPos = i; }
-      }
-    }
-    if (lastGoodPos > 0) {
-      const truncated = clean.substring(0, lastGoodPos + 1);
-      return JSON.parse(truncated);
-    }
+    const fixed = fixNewlinesInStrings(clean);
+    return JSON.parse(fixed);
+  } catch(e) {}
+
+  // Intento 3: eliminar caracteres de control
+  try {
+    const fixed = clean.replace(/[\u0000-\u0009\u000B\u000C\u000E-\u001F]/g,'');
+    return JSON.parse(fixed);
+  } catch(e) {}
+
+  // Intento 4: cerrar JSON truncado
+  try {
+    const fixed = closeOpenJSON(clean);
+    if (fixed) return JSON.parse(fixed);
   } catch(e) {}
 
   return null;
 }
+
+function fixNewlinesInStrings(json) {
+  let result = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
+    if (c === '"' && json[i-1] !== '\\') {
+      inString = !inString;
+      result += c;
+    } else if (inString && c === '\n') {
+      result += '\\n';
+    } else if (inString && c === '\r') {
+      result += '\\r';
+    } else if (inString && c === '\t') {
+      result += '\\t';
+    } else {
+      result += c;
+    }
+  }
+  return result;
+}
+
+function closeOpenJSON(json) {
+  let depth = 0;
+  let inStr = false;
+  let lastComplete = -1;
+  const stack = [];
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
+    if (c === '"' && json[i-1] !== '\\') inStr = !inStr;
+    if (inStr) continue;
+    if (c === '{' || c === '[') { stack.push(c); depth++; }
+    if (c === '}' || c === ']') { stack.pop(); depth--; if (depth===0) lastComplete=i; }
+  }
+  if (lastComplete > 0) return json.substring(0, lastComplete + 1);
+  if (stack.length > 0) {
+    let closing = stack.reverse().map(c => c==='{' ? '}' : ']').join('');
+    return json + closing;
+  }
+  return null;
+}
+
 
 // ═══════════════════════════════════════════════
 // INIT
