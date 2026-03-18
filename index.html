@@ -827,7 +827,7 @@ async function generateStory() {
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
-        model:'claude-opus-4-5',
+        model:'claude-sonnet-4-6',
         max_tokens: maxTokens,
         messages:[{role:'user',content:buildStoryPrompt()}]
       })
