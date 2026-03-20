@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<!-- PodcastELE v3.0 -->
 <title>PodcastELE — Generador de Cuentos para Podcasts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -809,16 +813,60 @@ function parseStoryText(text) {
 function parseStoryJSON(text) {
   let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
   const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
-  if (s===-1||e===-1) return null;
-  clean = clean.substring(s, e+1);
-  // Intentos: directo, escapar saltos, cerrar truncado
+  if (s===-1) return null;
+  // Si no hay } final, intentar con el texto hasta donde llegó
+  clean = e!==-1 ? clean.substring(s, e+1) : clean.substring(s);
+
   const attempts = [
     ()=> JSON.parse(clean),
     ()=> JSON.parse(escapeNewlines(clean)),
-    ()=> { const c=closeJSON(clean); return c?JSON.parse(escapeNewlines(c)):null; }
+    ()=> { const c=closeJSON(clean); return c ? JSON.parse(escapeNewlines(c)) : null; },
+    ()=> extractStoryFields(clean)  // último recurso: extracción manual
   ];
-  for (const fn of attempts) { try { const r=fn(); if(r) return r; } catch(e){} }
+  for (const fn of attempts) {
+    try { const r=fn(); if(r && r.titulo && r.capitulos?.length) return r; } catch(e){}
+  }
   return null;
+}
+
+// Extracción de campos básicos sin JSON.parse
+function extractStoryFields(text) {
+  const getStr = (key) => {
+    const m = text.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+    return m ? m[1].replace(/\\n/g,'\n').replace(/\\"/g,'"') : '';
+  };
+  const titulo = getStr('titulo');
+  if (!titulo) return null;
+
+  // Extraer contenidos de capítulos
+  const contenidos = [...text.matchAll(/"contenido"\s*:\s*"((?:[^"\\]|\\.)*)"/g)];
+  const titCapitulos = [...text.matchAll(/"titulo"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].slice(1);
+
+  if (!contenidos.length) return null;
+
+  const capitulos = contenidos.map((m, i) => ({
+    numero: i+1,
+    titulo: titCapitulos[i] ? titCapitulos[i][1] : `Capítulo ${i+1}`,
+    contenido: m[1].replace(/\\n/g,'\n').replace(/\\"/g,'"')
+  }));
+
+  const glosarioMatches = [...text.matchAll(/"palabra"\s*:\s*"([^"]+)"[^}]*"definicion"\s*:\s*"([^"]+)"/g)];
+  const glosario = glosarioMatches.map(m => ({palabra:m[1], definicion:m[2]}));
+
+  return {
+    titulo,
+    subtitulo: getStr('subtitulo'),
+    sinopsis: getStr('sinopsis'),
+    palabrasClave: [],
+    capitulos,
+    notasNarrador: getStr('notasNarrador'),
+    glosario,
+    nivelMCER: state.cefrLevel,
+    genero: state.genre,
+    tono: state.tones.join(', '),
+    publico: state.audience,
+    duracionEstimada: state.durationMin
+  };
 }
 
 // ── Parser texto plano (ejercicios) ──
@@ -848,14 +896,47 @@ function parseExercisesText(text) {
 function parseExercisesJSON(text) {
   let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
   const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
-  if (s===-1||e===-1) return null;
-  clean = clean.substring(s, e+1);
+  if (s===-1) return null;
+  clean = e!==-1 ? clean.substring(s, e+1) : clean.substring(s);
+
   const attempts = [
     ()=> JSON.parse(clean),
     ()=> JSON.parse(escapeNewlines(clean)),
-    ()=> { const c=closeJSON(clean); return c?JSON.parse(escapeNewlines(c)):null; }
+    ()=> { const c=closeJSON(clean); return c ? JSON.parse(escapeNewlines(c)) : null; }
   ];
-  for (const fn of attempts) { try { const r=fn(); if(r&&r.ejercicios) return r; } catch(e){} }
+  for (const fn of attempts) {
+    try { const r=fn(); if(r && r.ejercicios) return r; } catch(e){}
+  }
+
+  // Último recurso: intentar reconstruir ejercicios desde JSON parcial
+  try {
+    const ejercicios = [];
+    const bloques = clean.split(/"tipo"\s*:\s*"comprension"|"tipo"\s*:\s*"vocabulario"|"tipo"\s*:\s*"gramatica"|"tipo"\s*:\s*"conversacion"|"tipo"\s*:\s*"escritura"|"tipo"\s*:\s*"dictado"|"tipo"\s*:\s*"cultura"/);
+    const tipos = [...clean.matchAll(/"tipo"\s*:\s*"(comprension|vocabulario|gramatica|conversacion|escritura|dictado|cultura)"/g)];
+    for (let i=0; i<tipos.length; i++) {
+      const tipo = tipos[i][1];
+      const inicio = tipos[i].index;
+      const fin = tipos[i+1] ? tipos[i+1].index : clean.length;
+      const bloque = clean.substring(inicio, fin);
+      const getStr = (k) => { const m=bloque.match(new RegExp(`"${k}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`)); return m?m[1]:''; };
+      const items = [];
+      const pregs = [...bloque.matchAll(/"pregunta"\s*:\s*"((?:[^"\\]|\\.)*)"/g)];
+      pregs.forEach(pm => {
+        const preg = pm[1].replace(/\\n/g,'\n');
+        const opcM = bloque.substring(pm.index).match(/"opciones"\s*:\s*\[(.*?)\]/s);
+        if (opcM) {
+          const opts = [...opcM[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(o=>o[1]);
+          const respM = bloque.substring(pm.index).match(/"respuesta"\s*:\s*"([^"]+)"/);
+          items.push({tipo:'opcion_multiple', pregunta:preg, opciones:opts, respuesta:respM?respM[1]:''});
+        } else {
+          const respM = bloque.substring(pm.index, pm.index+300).match(/"respuestaModelo"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          items.push({tipo:'abierta', pregunta:preg, respuestaModelo:respM?respM[1]:''});
+        }
+      });
+      if (items.length) ejercicios.push({tipo, icono:'📋', titulo:getStr('titulo')||tipo, instrucciones:getStr('instrucciones'), items, notasProfesor:getStr('notasProfesor')});
+    }
+    if (ejercicios.length) return {nivelMCER:state.cefrLevel, tituloBase:state.story?.titulo||'', ejercicios};
+  } catch(e){}
   return null;
 }
 
