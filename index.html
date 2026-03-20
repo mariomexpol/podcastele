@@ -691,32 +691,33 @@ ${extra ? `• Instrucciones especiales: ${extra}` : ''}
 ${CEFR_DESCRIPTIONS[state.cefrLevel]}
 
 ╔══ EXTENSIÓN Y FORMATO ══╗
-• Duración objetivo: ${dur} minutos de lectura en voz alta a ritmo de podcast
-• Extensión aproximada: ${words} palabras en total (MUY IMPORTANTE: respeta esta extensión)
-• Organiza el cuento en ${dur <= 10 ? '2-3' : dur <= 25 ? '3-5' : dur <= 45 ? '4-6' : '5-8'} capítulos con títulos creativos
-• Cada capítulo debe tener contenido sustancioso y bien desarrollado
+• Duración objetivo: ${dur} minutos de lectura en voz alta (~${words} palabras)
+• IMPORTANTE: El límite de respuesta es 8000 tokens. Ajusta la longitud para no superar el límite.
+  - Hasta 15 min: escribe el cuento completo con todos los campos
+  - 16-30 min: glosario máximo 6 palabras, notas del narrador breves (3-4 líneas)
+  - Más de 30 min: glosario máximo 4 palabras, notasNarrador en una sola frase corta
+• Organiza el cuento en ${dur <= 10 ? '2-3' : dur <= 25 ? '3-4' : '4-5'} capítulos
 • Incluye diálogos vivos y descripciones ambientales ricas
 • El ritmo debe ser apropiado para escuchar, no solo para leer
 
 ╔══ CALIDAD NARRATIVA ══╗
 • Inicio: gancho narrativo inmediato en las primeras líneas
-• Desarrollo: trama coherente con personajes tridimensionales
-• Clímax: momento de máxima tensión o emoción bien construido
-• Desenlace: resolución satisfactoria (puede ser abierta si el tono lo pide)
-• Voz narrativa: consistente y con personalidad propia
+• Desarrollo: trama coherente con personajes bien definidos
+• Clímax: momento de máxima tensión o emoción
+• Desenlace: resolución satisfactoria (puede ser abierta)
 
-Responde ÚNICAMENTE con un objeto JSON válido (sin backticks, sin markdown, sin texto previo ni posterior):
+Responde ÚNICAMENTE con JSON válido (sin backticks, sin markdown):
 {
   "titulo": "Título evocador del cuento",
   "subtitulo": "Subtítulo literario opcional",
-  "sinopsis": "Sinopsis atractiva de 2-3 frases para presentar en el podcast antes de leer",
-  "palabrasClave": ["palabra1","palabra2","...hasta 8 palabras temáticas"],
+  "sinopsis": "Sinopsis de 2-3 frases para presentar en el podcast",
+  "palabrasClave": ["palabra1","palabra2","hasta 6 palabras"],
   "capitulos": [
-    {"numero":1,"titulo":"Título del capítulo","contenido":"Texto completo del capítulo, mínimo 300 palabras por capítulo..."}
+    {"numero":1,"titulo":"Título del capítulo","contenido":"Texto completo del capítulo..."}
   ],
-  "notasNarrador": "Notas detalladas para el podcaster: sugerencias de énfasis dramático, pausas, velocidad, efectos de sonido sugeridos, fragmentos para ralentizar la lectura, momentos de silencio, etc.",
+  "notasNarrador": "Notas breves para el podcaster sobre pausas y énfasis",
   "glosario": [
-    {"palabra":"término_avanzado","definicion":"Definición clara y sencilla en español, sin usar la palabra definida"}
+    {"palabra":"término","definicion":"Definición clara en español"}
   ],
   "nivelMCER": "${state.cefrLevel}",
   "genero": "${state.genre}",
@@ -741,6 +742,7 @@ FRAGMENTO DEL CUENTO:
 ${excerpt}${storyText.length > 3000 ? '\n[... continúa ...]' : ''}
 
 TIPOS DE EJERCICIOS A GENERAR: ${checked.join(', ')}
+IMPORTANTE: El límite es 8000 tokens. Si hay muchos tipos seleccionados, reduce el número de ítems por ejercicio (mínimo 3 ítems por tipo). Es mejor menos ítems completos que muchos cortados.
 
 REGLAS CRÍTICAS DE FORMATO JSON:
 Todos los items DEBEN usar EXACTAMENTE uno de estos tipos con sus campos obligatorios:
@@ -807,7 +809,7 @@ async function generateStory() {
   },2500);
 
   const words = state.durationMin * WPM;
-  const maxTokens = Math.min(16000, Math.max(4000, Math.ceil(words * 2.5)));
+  const maxTokens = 8000;
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages',{
@@ -816,7 +818,6 @@ async function generateStory() {
         'Content-Type':'application/json',
         'x-api-key':key,
         'anthropic-version':'2023-06-01',
-        'anthropic-beta':'output-128k-2025-02-19',
         'anthropic-dangerous-direct-browser-access':'true'
       },
       body:JSON.stringify({
@@ -870,12 +871,11 @@ async function generateExercises() {
         'Content-Type':'application/json',
         'x-api-key':key,
         'anthropic-version':'2023-06-01',
-        'anthropic-beta':'output-128k-2025-02-19',
         'anthropic-dangerous-direct-browser-access':'true'
       },
       body:JSON.stringify({
         model:'claude-sonnet-4-6',
-        max_tokens:12000,
+        max_tokens:8000,
         messages:[{role:'user',content:buildExercisesPrompt()}]
       })
     });
