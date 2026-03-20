@@ -731,41 +731,47 @@ function buildExercisesPrompt() {
   const storyText = state.story.capitulos.map(c=>`${c.titulo}:\n${c.contenido}`).join('\n\n');
   const excerpt = storyText.substring(0, 3000);
 
-  const exDescriptions = {
-    comprension: 'Comprensión lectora: 6-8 preguntas de comprensión (4 de opción múltiple con 4 opciones, 2-3 abiertas, 1-2 de verdadero/falso con justificación)',
-    vocabulario: 'Vocabulario en contexto: 8-10 palabras/expresiones clave del cuento. Para cada una: definición, ejemplo de uso en otra oración, y ejercicio de completar (fill-in-the-blank)',
-    gramatica: `Gramática práctica nivel ${state.cefrLevel}: 5-7 ejercicios enfocados en estructuras gramaticales presentes en el cuento y apropiadas para el nivel`,
-    expresiones: 'Expresiones idiomáticas: 4-6 expresiones del cuento o relacionadas con el tema, con su significado, origen y ejemplos de uso',
-    pronunciacion: 'Guía de pronunciación: 10-15 palabras difíciles del cuento con transcripción fonética, reglas de pronunciación relevantes y pares mínimos',
-    conversacion: 'Conversación y debate: 6-8 preguntas abiertas para discusión en clase o para reflexión, organizadas de más simple a más compleja',
-    escritura: 'Escritura creativa: 3-4 actividades de extensión creativa (cambiar el final, escribir desde otro punto de vista, continuar la historia, escribir una carta de un personaje)',
-    dictado: 'Fragmento para dictado: Un párrafo representativo del cuento de 80-120 palabras, con instrucciones para el profesor sobre cómo dictarlo',
-    cultura: 'Contexto cultural: información sobre elementos culturales, históricos o geográficos mencionados en el cuento, con preguntas de reflexión intercultural'
-  };
-
-  const selectedDescriptions = checked.map(c => exDescriptions[c]).join('\n\n');
-
-  return `Eres un experto en didáctica del español como lengua extranjera (ELE) con experiencia en diseño de materiales pedagógicos. Crea ejercicios completos y de alta calidad pedagógica basados en el siguiente cuento.
+  return `Eres un experto en didáctica del español como lengua extranjera (ELE). Crea ejercicios pedagógicos completos basados en el siguiente cuento.
 
 CUENTO: "${state.story.titulo}"
 NIVEL MCER: ${state.cefrLevel}
 PÚBLICO: ${state.audience}
 
-FRAGMENTO DEL CUENTO (para contexto):
+FRAGMENTO DEL CUENTO:
 ${excerpt}${storyText.length > 3000 ? '\n[... continúa ...]' : ''}
 
-TIPOS DE EJERCICIOS A CREAR:
-${selectedDescriptions}
+TIPOS DE EJERCICIOS A GENERAR: ${checked.join(', ')}
 
-INSTRUCCIONES PEDAGÓGICAS:
-- Adapta rigorosamente la dificultad al nivel ${state.cefrLevel}
-- Basa los ejercicios en el contenido REAL del cuento (cita fragmentos cuando sea útil)
-- Incluye instrucciones claras en español para los alumnos
-- Incluye respuestas/clave y notas metodológicas para el profesor
-- Los ejercicios deben ser variados, creativos y comunicativos
-- Progresión: de lo más receptivo/controlado a lo más productivo/libre
+REGLAS CRÍTICAS DE FORMATO JSON:
+Todos los items DEBEN usar EXACTAMENTE uno de estos tipos con sus campos obligatorios:
 
-Responde ÚNICAMENTE con JSON válido (sin backticks):
+TIPO "opcion_multiple":
+{"tipo":"opcion_multiple","pregunta":"¿Pregunta?","opciones":["a) opción","b) opción","c) opción","d) opción"],"respuesta":"a","explicacion":"Por qué es correcta"}
+
+TIPO "abierta":
+{"tipo":"abierta","pregunta":"¿Pregunta abierta?","respuestaModelo":"Respuesta modelo para el docente"}
+
+TIPO "verdadero_falso":
+{"tipo":"verdadero_falso","afirmacion":"Afirmación sobre el texto","respuesta":"Verdadero","justificacion":"Fragmento del texto que lo justifica"}
+
+TIPO "completar":
+{"tipo":"completar","pregunta":"Completa: El protagonista ___ (verbo en presente) en Madrid.","respuestaModelo":"vive"}
+
+TIPO "info":
+{"tipo":"info","contenido":"Texto informativo, explicación gramatical, entrada de vocabulario, etc. Sin límite de longitud."}
+
+INSTRUCCIONES POR TIPO DE EJERCICIO:
+${checked.includes('comprension') ? '- COMPRENSIÓN: 4 preguntas opcion_multiple + 2 abiertas + 2 verdadero_falso' : ''}
+${checked.includes('vocabulario') ? '- VOCABULARIO: Para cada palabra del cuento: 1 item "info" con "PALABRA — definición. Ejemplo de uso." + 1 item "completar" con esa palabra. Mínimo 6 palabras.' : ''}
+${checked.includes('gramatica') ? `- GRAMÁTICA: 6-8 items de tipo "completar" o "opcion_multiple" enfocados en estructuras del nivel ${state.cefrLevel} presentes en el cuento. Incluir 1 item "info" explicando la regla gramatical antes de cada grupo de ejercicios.` : ''}
+${checked.includes('expresiones') ? '- EXPRESIONES IDIOMÁTICAS: Para cada expresión: 1 item "info" con significado y origen + 1 item "abierta" para practicarla.' : ''}
+${checked.includes('pronunciacion') ? '- PRONUNCIACIÓN: Items "info" con palabras difíciles, transcripción fonética y reglas. Items "completar" con pares mínimos.' : ''}
+${checked.includes('conversacion') ? '- CONVERSACIÓN: 6-8 items de tipo "abierta" ordenados de simple a complejo.' : ''}
+${checked.includes('escritura') ? '- ESCRITURA CREATIVA: 3-4 items de tipo "abierta" con consignas creativas.' : ''}
+${checked.includes('dictado') ? '- DICTADO: 1 item "info" con el fragmento para dictar + 1 item "abierta" con instrucciones para el docente.' : ''}
+${checked.includes('cultura') ? '- CULTURA: Items "info" sobre contexto cultural + items "abierta" de reflexión intercultural.' : ''}
+
+Responde ÚNICAMENTE con este JSON válido (sin backticks, sin texto antes o después):
 {
   "nivelMCER": "${state.cefrLevel}",
   "tituloBase": "${state.story.titulo}",
@@ -774,28 +780,9 @@ Responde ÚNICAMENTE con JSON válido (sin backticks):
       "tipo": "comprension",
       "icono": "📝",
       "titulo": "Comprensión del texto",
-      "instrucciones": "Instrucciones claras para el alumno",
-      "items": [
-        {
-          "tipo": "opcion_multiple",
-          "pregunta": "¿...?",
-          "opciones": ["a) ...", "b) ...", "c) ...", "d) ..."],
-          "respuesta": "b",
-          "explicacion": "Explicación breve de por qué esta es la respuesta correcta"
-        },
-        {
-          "tipo": "abierta",
-          "pregunta": "¿...?",
-          "respuestaModelo": "Respuesta modelo o aspectos que debe mencionar el alumno"
-        },
-        {
-          "tipo": "verdadero_falso",
-          "afirmacion": "Enunciado...",
-          "respuesta": "Verdadero",
-          "justificacion": "Justificación con referencia al texto"
-        }
-      ],
-      "notasProfesor": "Notas metodológicas y respuestas completas para el docente"
+      "instrucciones": "Instrucciones para el alumno",
+      "items": [],
+      "notasProfesor": "Notas para el docente"
     }
   ]
 }`;
@@ -967,30 +954,44 @@ function renderExercises(data) {
   const container = document.getElementById('exercisesContent');
   
   const exHTML = (data.ejercicios||[]).map(ex=>{
+    let itemNum = 0;
     const itemsHTML = (ex.items||[]).map(item=>{
-      if (item.tipo==='opcion_multiple') {
+      if (item.tipo==='info') {
+        return `<div style="background:var(--blue-bg);border-left:3px solid var(--blue);border-radius:0 var(--r) var(--r) 0;padding:.7rem 1rem;margin:.5rem 0;font-size:.85rem;color:var(--text2);line-height:1.6;white-space:pre-wrap">${esc(item.contenido||'')}</div>`;
+      } else if (item.tipo==='opcion_multiple') {
+        itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${esc(item.pregunta||'')}</div>
+          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
           <div class="options">${(item.opciones||[]).map(o=>`<div class="opt">${esc(o)}</div>`).join('')}</div>
-          ${item.explicacion ? `<details style="margin-top:.5rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta)} — ${esc(item.explicacion)}</p></details>` : ''}
+          ${item.respuesta||item.explicacion ? `<details style="margin-top:.5rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta||'')} ${item.explicacion?'— '+esc(item.explicacion):''}</p></details>` : ''}
         </div>`;
       } else if (item.tipo==='abierta') {
+        itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${esc(item.pregunta||'')}</div>
+          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
           ${item.respuestaModelo ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Respuesta modelo</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">💡 ${esc(item.respuestaModelo)}</p></details>` : ''}
         </div>`;
       } else if (item.tipo==='verdadero_falso') {
+        itemNum++;
         return `<div class="exercise-item">
-          <div class="q">¿Verdadero o Falso? ${esc(item.afirmacion||'')}</div>
-          ${item.respuesta ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta)} — ${esc(item.justificacion||'')}</p></details>` : ''}
+          <div class="q">${itemNum}. ¿Verdadero o Falso? ${esc(item.afirmacion||'')}</div>
+          ${item.respuesta ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta)} ${item.justificacion?'— '+esc(item.justificacion):''}</p></details>` : ''}
+        </div>`;
+      } else if (item.tipo==='completar') {
+        itemNum++;
+        return `<div class="exercise-item">
+          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
+          ${item.respuestaModelo ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuestaModelo)}</p></details>` : ''}
         </div>`;
       } else {
-        // Generic item
-        const q = item.pregunta||item.enunciado||item.actividad||JSON.stringify(item);
-        const r = item.respuesta||item.respuestaModelo||item.explicacion||'';
+        // Fallback genérico — muestra lo que haya
+        const q = item.pregunta||item.afirmacion||item.enunciado||item.actividad||item.contenido||'';
+        const r = item.respuesta||item.respuestaModelo||item.explicacion||item.justificacion||'';
+        if (!q && !r) return '';
+        itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${esc(typeof q==='string'?q:JSON.stringify(q))}</div>
-          ${r ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta/notas</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">${esc(typeof r==='string'?r:JSON.stringify(r))}</p></details>` : ''}
+          <div class="q">${itemNum}. ${esc(typeof q==='string'?q:JSON.stringify(q))}</div>
+          ${r ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">${esc(typeof r==='string'?r:JSON.stringify(r))}</p></details>` : ''}
         </div>`;
       }
     }).join('');
