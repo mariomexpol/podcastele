@@ -807,7 +807,7 @@ async function generateStory() {
   },2500);
 
   const words = state.durationMin * WPM;
-  const maxTokens = Math.min(16000, Math.max(4000, Math.ceil(words * 3)));
+  const maxTokens = Math.min(32000, Math.max(6000, Math.ceil(words * 4)));
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages',{
@@ -1285,7 +1285,10 @@ function showToast(msg, type='success') {
 // ROBUST JSON PARSER
 // ═══════════════════════════════════════════════
 function robustJSONParse(text) {
+  // Limpiar markdown
   let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+
+  // Extraer bloque JSON
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
   if (start === -1 || end === -1) return null;
@@ -1294,54 +1297,32 @@ function robustJSONParse(text) {
   // Intento 1: directo
   try { return JSON.parse(clean); } catch(e) {}
 
-  // Intento 2: escapar correctamente los caracteres problemáticos dentro de strings
-  try { return JSON.parse(fixControlChars(clean)); } catch(e) {}
+  // Intento 2: convertir saltos de línea LITERALES a secuencias escapadas
+  // Es seguro porque los saltos estructurales del JSON también se convierten
+  // y JSON.parse los ignora igualmente como whitespace fuera de strings
+  try {
+    const fixed = clean
+      .replace(/\r\n/g, '\\n')
+      .replace(/\r/g, '\\n')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t');
+    return JSON.parse(fixed);
+  } catch(e) {}
 
-  // Intento 3: cerrar JSON truncado y luego fixear
+  // Intento 3: cerrar JSON truncado por max_tokens, luego intento 2
   try {
     const closed = closeJSON(clean);
-    if (closed) return JSON.parse(fixControlChars(closed));
+    if (closed) {
+      const fixed = closed
+        .replace(/\r\n/g, '\\n')
+        .replace(/\r/g, '\\n')
+        .replace(/\n/g, '\\n')
+        .replace(/\t/g, '\\t');
+      return JSON.parse(fixed);
+    }
   } catch(e) {}
 
   return null;
-}
-
-function fixControlChars(json) {
-  let result = '';
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < json.length; i++) {
-    const c = json[i];
-
-    if (escaped) {
-      escaped = false;
-      result += c;
-      continue;
-    }
-
-    if (c === '\\' && inString) {
-      escaped = true;
-      result += c;
-      continue;
-    }
-
-    if (c === '"') {
-      inString = !inString;
-      result += c;
-      continue;
-    }
-
-    if (inString) {
-      if      (c === '\n') { result += '\\n';  continue; }
-      else if (c === '\r') { result += '\\r';  continue; }
-      else if (c === '\t') { result += '\\t';  continue; }
-      else if (c.charCodeAt(0) < 32) { continue; } // descartar otros ctrl chars
-    }
-
-    result += c;
-  }
-  return result;
 }
 
 function closeJSON(json) {
