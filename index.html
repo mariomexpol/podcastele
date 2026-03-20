@@ -673,121 +673,90 @@ function buildStoryPrompt() {
   const epNum     = document.getElementById('episodioNum').value;
   const seriePrev = document.getElementById('seriePrevio').value;
 
-  return `Eres un escritor literario experto en literatura hispana y didáctica del español como lengua extranjera (ELE). Crea un cuento original y completo con las siguientes especificaciones precisas:
+  return `Eres un escritor literario experto en ELE. Crea un cuento para podcast de español con estas especificaciones:
 
-╔══ PARÁMETROS NARRATIVOS ══╗
-• Tema/Idea: ${tema || 'Libre — elige algo original e interesante para un podcast'}
-• Género: ${state.genre.replace('_',' ')}
-• Tono/Atmósfera: ${tones}
-• Público: ${state.audience}
-${prot ? `• Protagonista: ${prot}` : ''}
-${amb  ? `• Ambientación: ${amb}` : ''}
-${var_ ? `• Variedad lingüística: ${var_}` : '• Variedad: español neutro'}
-${serieMode ? `• MODO SERIE: "${serieNom}" — Episodio ${epNum}` : ''}
-${serieMode && seriePrev ? `• Resumen anterior: ${seriePrev}` : ''}
-${extra ? `• Instrucciones especiales: ${extra}` : ''}
+GÉNERO: ${state.genre.replace('_',' ')} | TONO: ${tones} | PÚBLICO: ${state.audience}
+NIVEL MCER ${state.cefrLevel}: ${CEFR_DESCRIPTIONS[state.cefrLevel]}
+DURACIÓN: ${dur} minutos (~${words} palabras)
+${tema ? 'TEMA: '+tema : ''}${prot ? '\nPROTAGONISTA: '+prot : ''}${amb ? '\nAMBIENTACIÓN: '+amb : ''}${var_ ? '\nVARIEDAD: '+var_ : ''}${serieMode ? `\nSERIE: "${serieNom}" Episodio ${epNum}` : ''}${serieMode && seriePrev ? '\nANTERIOR: '+seriePrev : ''}${extra ? '\nINSTRUCCIONES: '+extra : ''}
 
-╔══ NIVEL MCER: ${state.cefrLevel} ══╗
-${CEFR_DESCRIPTIONS[state.cefrLevel]}
+Responde EXACTAMENTE con este formato de texto plano, usando los delimitadores indicados:
 
-╔══ EXTENSIÓN Y FORMATO ══╗
-• Duración objetivo: ${dur} minutos de lectura en voz alta (~${words} palabras)
-• IMPORTANTE: El límite de respuesta es 8000 tokens. Ajusta la longitud para no superar el límite.
-  - Hasta 15 min: escribe el cuento completo con todos los campos
-  - 16-30 min: glosario máximo 6 palabras, notas del narrador breves (3-4 líneas)
-  - Más de 30 min: glosario máximo 4 palabras, notasNarrador en una sola frase corta
-• Organiza el cuento en ${dur <= 10 ? '2-3' : dur <= 25 ? '3-4' : '4-5'} capítulos
-• Incluye diálogos vivos y descripciones ambientales ricas
-• El ritmo debe ser apropiado para escuchar, no solo para leer
-
-╔══ CALIDAD NARRATIVA ══╗
-• Inicio: gancho narrativo inmediato en las primeras líneas
-• Desarrollo: trama coherente con personajes bien definidos
-• Clímax: momento de máxima tensión o emoción
-• Desenlace: resolución satisfactoria (puede ser abierta)
-
-Responde ÚNICAMENTE con JSON válido (sin backticks, sin markdown):
-{
-  "titulo": "Título evocador del cuento",
-  "subtitulo": "Subtítulo literario opcional",
-  "sinopsis": "Sinopsis de 2-3 frases para presentar en el podcast",
-  "palabrasClave": ["palabra1","palabra2","hasta 6 palabras"],
-  "capitulos": [
-    {"numero":1,"titulo":"Título del capítulo","contenido":"Texto completo del capítulo..."}
-  ],
-  "notasNarrador": "Notas breves para el podcaster sobre pausas y énfasis",
-  "glosario": [
-    {"palabra":"término","definicion":"Definición clara en español"}
-  ],
-  "nivelMCER": "${state.cefrLevel}",
-  "genero": "${state.genre}",
-  "tono": "${tones}",
-  "publico": "${state.audience}",
-  "duracionEstimada": ${dur}
-}`;
+##TITULO##
+(escribe aquí el título)
+##SUBTITULO##
+(escribe aquí el subtítulo, puede estar vacío)
+##SINOPSIS##
+(escribe aquí la sinopsis de 2-3 frases)
+##PALABRAS##
+(escribe aquí las palabras clave separadas por comas)
+##CAPITULO_1##
+(título del capítulo 1)
+##TEXTO_1##
+(texto completo del capítulo 1)
+##CAPITULO_2##
+(título del capítulo 2)
+##TEXTO_2##
+(texto completo del capítulo 2)
+(añade más capítulos si es necesario: ##CAPITULO_3##, ##TEXTO_3##, etc.)
+##NOTAS##
+(notas breves para el narrador del podcast: pausas, énfasis, velocidad)
+##GLOSARIO##
+(una palabra por línea con este formato: palabra|definición en español)
+##FIN##`;
 }
 
 function buildExercisesPrompt() {
   const checked = [...document.querySelectorAll('.ex-check:checked')].map(c=>c.value);
   const storyText = state.story.capitulos.map(c=>`${c.titulo}:\n${c.contenido}`).join('\n\n');
-  const excerpt = storyText.substring(0, 3000);
+  const excerpt = storyText.substring(0, 2500);
 
-  return `Eres un experto en didáctica del español como lengua extranjera (ELE). Crea ejercicios pedagógicos completos basados en el siguiente cuento.
+  const instrucciones = {
+    comprension: '3 preguntas de opción múltiple (a/b/c/d) + 2 preguntas abiertas + 2 verdadero/falso',
+    vocabulario: '5 palabras del cuento, cada una con: definición + oración de ejemplo + ejercicio de completar (frase con ___)',
+    gramatica: '5 ejercicios de completar o elegir la forma correcta, con explicación breve de la regla',
+    expresiones: '3 expresiones del cuento: significado + ejemplo de uso',
+    pronunciacion: '5 palabras difíciles con su pronunciación fonética y regla',
+    conversacion: '5 preguntas abiertas para debatir en clase, de más simple a más compleja',
+    escritura: '3 consignas de escritura creativa basadas en el cuento',
+    dictado: 'Un párrafo de 60-80 palabras del cuento para dictar + instrucciones para el docente',
+    cultura: '3 elementos culturales del cuento con explicación + 2 preguntas de reflexión'
+  };
 
-CUENTO: "${state.story.titulo}"
-NIVEL MCER: ${state.cefrLevel}
-PÚBLICO: ${state.audience}
+  const tiposSeleccionados = checked.map(c => `- ${c.toUpperCase()}: ${instrucciones[c]||''}`).join('\n');
+
+  return `Eres un experto en ELE. Crea ejercicios para el cuento "${state.story.titulo}" (nivel ${state.cefrLevel}, público: ${state.audience}).
 
 FRAGMENTO DEL CUENTO:
-${excerpt}${storyText.length > 3000 ? '\n[... continúa ...]' : ''}
+${excerpt}${storyText.length > 2500 ? '\n[continúa...]' : ''}
 
-TIPOS DE EJERCICIOS A GENERAR: ${checked.join(', ')}
-IMPORTANTE: El límite es 8000 tokens. Si hay muchos tipos seleccionados, reduce el número de ítems por ejercicio (mínimo 3 ítems por tipo). Es mejor menos ítems completos que muchos cortados.
+EJERCICIOS A CREAR:
+${tiposSeleccionados}
 
-REGLAS CRÍTICAS DE FORMATO JSON:
-Todos los items DEBEN usar EXACTAMENTE uno de estos tipos con sus campos obligatorios:
+Usa EXACTAMENTE este formato de texto plano:
 
-TIPO "opcion_multiple":
-{"tipo":"opcion_multiple","pregunta":"¿Pregunta?","opciones":["a) opción","b) opción","c) opción","d) opción"],"respuesta":"a","explicacion":"Por qué es correcta"}
+##EJERCICIO##
+TIPO: (nombre del tipo: comprension / vocabulario / gramatica / etc.)
+ICONO: (un emoji apropiado)
+TITULO: (título del ejercicio)
+INSTRUCCIONES: (instrucciones claras para el alumno)
+##ITEMS##
+---ITEM---
+FORMATO: (opcion_multiple / abierta / verdadero_falso / completar / info)
+PREGUNTA: (la pregunta o enunciado)
+OPCIONES: a) ... | b) ... | c) ... | d) ...  (solo para opcion_multiple)
+RESPUESTA: (la respuesta correcta o modelo)
+EXPLICACION: (explicación breve)
+---ITEM---
+(repite para cada ítem)
+##NOTAS_PROFE##
+(notas metodológicas para el docente)
+##FIN_EJERCICIO##
 
-TIPO "abierta":
-{"tipo":"abierta","pregunta":"¿Pregunta abierta?","respuestaModelo":"Respuesta modelo para el docente"}
+(repite ##EJERCICIO## ... ##FIN_EJERCICIO## para cada tipo seleccionado)
 
-TIPO "verdadero_falso":
-{"tipo":"verdadero_falso","afirmacion":"Afirmación sobre el texto","respuesta":"Verdadero","justificacion":"Fragmento del texto que lo justifica"}
-
-TIPO "completar":
-{"tipo":"completar","pregunta":"Completa: El protagonista ___ (verbo en presente) en Madrid.","respuestaModelo":"vive"}
-
-TIPO "info":
-{"tipo":"info","contenido":"Texto informativo, explicación gramatical, entrada de vocabulario, etc. Sin límite de longitud."}
-
-INSTRUCCIONES POR TIPO DE EJERCICIO:
-${checked.includes('comprension') ? '- COMPRENSIÓN: 4 preguntas opcion_multiple + 2 abiertas + 2 verdadero_falso' : ''}
-${checked.includes('vocabulario') ? '- VOCABULARIO: Para cada palabra del cuento: 1 item "info" con "PALABRA — definición. Ejemplo de uso." + 1 item "completar" con esa palabra. Mínimo 6 palabras.' : ''}
-${checked.includes('gramatica') ? `- GRAMÁTICA: 6-8 items de tipo "completar" o "opcion_multiple" enfocados en estructuras del nivel ${state.cefrLevel} presentes en el cuento. Incluir 1 item "info" explicando la regla gramatical antes de cada grupo de ejercicios.` : ''}
-${checked.includes('expresiones') ? '- EXPRESIONES IDIOMÁTICAS: Para cada expresión: 1 item "info" con significado y origen + 1 item "abierta" para practicarla.' : ''}
-${checked.includes('pronunciacion') ? '- PRONUNCIACIÓN: Items "info" con palabras difíciles, transcripción fonética y reglas. Items "completar" con pares mínimos.' : ''}
-${checked.includes('conversacion') ? '- CONVERSACIÓN: 6-8 items de tipo "abierta" ordenados de simple a complejo.' : ''}
-${checked.includes('escritura') ? '- ESCRITURA CREATIVA: 3-4 items de tipo "abierta" con consignas creativas.' : ''}
-${checked.includes('dictado') ? '- DICTADO: 1 item "info" con el fragmento para dictar + 1 item "abierta" con instrucciones para el docente.' : ''}
-${checked.includes('cultura') ? '- CULTURA: Items "info" sobre contexto cultural + items "abierta" de reflexión intercultural.' : ''}
-
-Responde ÚNICAMENTE con este JSON válido (sin backticks, sin texto antes o después):
-{
-  "nivelMCER": "${state.cefrLevel}",
-  "tituloBase": "${state.story.titulo}",
-  "ejercicios": [
-    {
-      "tipo": "comprension",
-      "icono": "📝",
-      "titulo": "Comprensión del texto",
-      "instrucciones": "Instrucciones para el alumno",
-      "items": [],
-      "notasProfesor": "Notas para el docente"
-    }
-  ]
-}`;
+##FIN##`;
+}
 }
 
 // ═══════════════════════════════════════════════
@@ -835,7 +804,7 @@ async function generateStory() {
     console.log('STOP REASON:', data.stop_reason);
     console.log('RAW (primeros 800 chars):', text.substring(0, 800));
     console.log('RAW (últimos 300 chars):', text.substring(text.length - 300));
-    const parsed = robustJSONParse(text);
+    const parsed = parseStoryText(text);
     if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.story = parsed;
     renderStory(parsed);
@@ -885,7 +854,7 @@ async function generateExercises() {
     console.log('EX STOP REASON:', data.stop_reason);
     console.log('EX RAW (primeros 800):', text.substring(0,800));
     console.log('EX RAW (últimos 300):', text.substring(text.length-300));
-    const parsed = robustJSONParse(text);
+    const parsed = parseExercisesText(text);
     if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.exercises = parsed;
     renderExercises(parsed);
@@ -1294,81 +1263,120 @@ function showToast(msg, type='success') {
 }
 
 // ═══════════════════════════════════════════════
-// ROBUST JSON PARSER
+// TEXT PARSERS (reemplaza JSON)
 // ═══════════════════════════════════════════════
-function robustJSONParse(text) {
-  let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-  const start = clean.indexOf('{');
-  const end = clean.lastIndexOf('}');
-  if (start === -1 || end === -1) return null;
-  clean = clean.substring(start, end + 1);
+function parseStoryText(text) {
+  const get = (tag) => {
+    const re = new RegExp(`##${tag}##\\s*([\\s\\S]*?)(?=##|$)`,'i');
+    const m = text.match(re);
+    return m ? m[1].trim() : '';
+  };
 
-  // Intento 1: directo
-  try { return JSON.parse(clean); } catch(e) {}
+  const titulo = get('TITULO');
+  if (!titulo) return null;
 
-  // Intento 2: escapar saltos de línea SOLO dentro de strings (char a char)
-  try { return JSON.parse(escapeInsideStrings(clean)); } catch(e) {}
+  // Extraer capítulos dinámicamente
+  const capitulos = [];
+  let i = 1;
+  while (true) {
+    const tituloRe = new RegExp(`##CAPITULO_${i}##\\s*([\\s\\S]*?)(?=##TEXTO_${i}##)`,'i');
+    const textoRe  = new RegExp(`##TEXTO_${i}##\\s*([\\s\\S]*?)(?=##CAPITULO_${i+1}##|##NOTAS##|##GLOSARIO##|##FIN##|$)`,'i');
+    const tm = text.match(tituloRe);
+    const cm = text.match(textoRe);
+    if (!cm) break;
+    capitulos.push({
+      numero: i,
+      titulo: tm ? tm[1].trim() : `Capítulo ${i}`,
+      contenido: cm[1].trim()
+    });
+    i++;
+  }
+  if (capitulos.length === 0) return null;
 
-  // Intento 3: cerrar JSON truncado + escapar
-  try {
-    const closed = closeJSON(clean);
-    if (closed) return JSON.parse(escapeInsideStrings(closed));
-  } catch(e) {}
+  // Glosario
+  const glosarioRaw = get('GLOSARIO');
+  const glosario = glosarioRaw.split('\n')
+    .map(l => l.trim()).filter(l => l.includes('|'))
+    .map(l => { const [p, d] = l.split('|'); return {palabra: p.trim(), definicion: (d||'').trim()}; });
 
-  return null;
+  return {
+    titulo,
+    subtitulo: get('SUBTITULO'),
+    sinopsis: get('SINOPSIS'),
+    palabrasClave: get('PALABRAS').split(',').map(p=>p.trim()).filter(Boolean),
+    capitulos,
+    notasNarrador: get('NOTAS'),
+    glosario,
+    nivelMCER: state.cefrLevel,
+    genero: state.genre,
+    tono: state.tones.join(', '),
+    publico: state.audience,
+    duracionEstimada: state.durationMin
+  };
 }
 
-function escapeInsideStrings(json) {
-  let result = '';
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < json.length; i++) {
-    const c = json[i];
-    if (escaped) {
-      escaped = false;
-      result += c;
-      continue;
-    }
-    if (c === '\\') {
-      if (inString) escaped = true;
-      result += c;
-      continue;
-    }
-    if (c === '"') {
-      inString = !inString;
-      result += c;
-      continue;
-    }
-    if (inString) {
-      if (c === '\n') { result += '\\n'; continue; }
-      if (c === '\r') { result += '\\r'; continue; }
-      if (c === '\t') { result += '\\t'; continue; }
-      if (c.charCodeAt(0) < 32) continue;
-    }
-    result += c;
-  }
-  return result;
-}
+function parseExercisesText(text) {
+  const ejercicios = [];
+  const bloques = text.split('##EJERCICIO##').slice(1);
 
-function closeJSON(json) {
-  let inStr = false; let escaped = false;
-  let lastComplete = -1;
-  const stack = [];
-  for (let i = 0; i < json.length; i++) {
-    const c = json[i];
-    if (escaped) { escaped = false; continue; }
-    if (c === '\\' && inStr) { escaped = true; continue; }
-    if (c === '"') { inStr = !inStr; continue; }
-    if (inStr) continue;
-    if (c === '{' || c === '[') stack.push(c);
-    if (c === '}' || c === ']') {
-      stack.pop();
-      if (stack.length === 0) lastComplete = i;
+  for (const bloque of bloques) {
+    const getField = (campo) => {
+      const re = new RegExp(`^${campo}:\\s*(.+)$`,'im');
+      const m = bloque.match(re);
+      return m ? m[1].trim() : '';
+    };
+
+    const tipo       = getField('TIPO');
+    const icono      = getField('ICONO');
+    const titulo     = getField('TITULO');
+    const instrucciones = getField('INSTRUCCIONES');
+    const notasProfesor = (bloque.match(/##NOTAS_PROFE##\s*([\s\S]*?)(?=##FIN_EJERCICIO##|$)/i)||[])[1]?.trim()||'';
+
+    // Parsear ítems
+    const items = [];
+    const itemsRaw = (bloque.match(/##ITEMS##\s*([\s\S]*?)(?=##NOTAS_PROFE##|##FIN_EJERCICIO##|$)/i)||[])[1]||'';
+    const itemBlocks = itemsRaw.split('---ITEM---').filter(s=>s.trim());
+
+    for (const ib of itemBlocks) {
+      const f = (campo) => {
+        const re = new RegExp(`^${campo}:\\s*(.+)$`,'im');
+        const m = ib.match(re);
+        return m ? m[1].trim() : '';
+      };
+      const formato   = f('FORMATO');
+      const pregunta  = f('PREGUNTA');
+      const respuesta = f('RESPUESTA');
+      const explicacion = f('EXPLICACION');
+      const opcionesRaw = f('OPCIONES');
+
+      if (!pregunta && !f('CONTENIDO')) continue;
+
+      if (formato === 'opcion_multiple') {
+        const opciones = opcionesRaw.split('|').map(o=>o.trim()).filter(Boolean);
+        items.push({tipo:'opcion_multiple', pregunta, opciones, respuesta, explicacion});
+      } else if (formato === 'verdadero_falso') {
+        items.push({tipo:'verdadero_falso', afirmacion: pregunta, respuesta, justificacion: explicacion});
+      } else if (formato === 'completar') {
+        items.push({tipo:'completar', pregunta, respuestaModelo: respuesta});
+      } else if (formato === 'info') {
+        const contenido = (ib.match(/^PREGUNTA:\s*([\s\S]+?)(?=RESPUESTA:|EXPLICACION:|$)/im)||[])[1]?.trim() || pregunta;
+        items.push({tipo:'info', contenido});
+      } else {
+        // abierta o desconocido
+        items.push({tipo:'abierta', pregunta, respuestaModelo: respuesta});
+      }
+    }
+
+    if (tipo || titulo) {
+      ejercicios.push({tipo, icono, titulo, instrucciones, items, notasProfesor});
     }
   }
-  if (lastComplete > 0) return json.substring(0, lastComplete + 1);
-  if (stack.length > 0) return json + stack.reverse().map(c => c==='{' ? '}' : ']').join('');
-  return null;
+
+  return ejercicios.length > 0 ? {
+    nivelMCER: state.cefrLevel,
+    tituloBase: state.story?.titulo || '',
+    ejercicios
+  } : null;
 }
 
 
