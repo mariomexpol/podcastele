@@ -757,11 +757,139 @@ EXPLICACION: (explicación breve)
 
 ##FIN##`;
 }
-}
 
 // ═══════════════════════════════════════════════
-// API CALLS
+// PARSERS — acepta tanto texto plano como JSON
 // ═══════════════════════════════════════════════
+function parseStoryResponse(text) {
+  // Si contiene delimitadores de texto plano → usar parser de texto
+  if (text.includes('##TITULO##')) return parseStoryText(text);
+  // Si contiene JSON → usar parser JSON
+  if (text.includes('"titulo"') || text.includes('"capitulos"')) return parseStoryJSON(text);
+  return null;
+}
+
+function parseExercisesResponse(text) {
+  if (text.includes('##EJERCICIO##')) return parseExercisesText(text);
+  if (text.includes('"ejercicios"')) return parseExercisesJSON(text);
+  return null;
+}
+
+// ── Parser texto plano (cuento) ──
+function parseStoryText(text) {
+  const get = (tag) => {
+    const re = new RegExp(`##${tag}##\\s*([\\s\\S]*?)(?=##|$)`,'i');
+    const m = text.match(re);
+    return m ? m[1].trim() : '';
+  };
+  const titulo = get('TITULO');
+  if (!titulo) return null;
+  const capitulos = [];
+  let i = 1;
+  while (true) {
+    const tRe = new RegExp(`##CAPITULO_${i}##\\s*([\\s\\S]*?)(?=##TEXTO_${i}##)`,'i');
+    const cRe = new RegExp(`##TEXTO_${i}##\\s*([\\s\\S]*?)(?=##CAPITULO_${i+1}##|##NOTAS##|##GLOSARIO##|##FIN##|$)`,'i');
+    const cm = text.match(cRe);
+    if (!cm) break;
+    const tm = text.match(tRe);
+    capitulos.push({ numero:i, titulo: tm?tm[1].trim():`Capítulo ${i}`, contenido:cm[1].trim() });
+    i++;
+  }
+  if (!capitulos.length) return null;
+  const glosario = get('GLOSARIO').split('\n').map(l=>l.trim()).filter(l=>l.includes('|'))
+    .map(l=>{ const [p,d]=l.split('|'); return {palabra:p.trim(),definicion:(d||'').trim()}; });
+  return { titulo, subtitulo:get('SUBTITULO'), sinopsis:get('SINOPSIS'),
+    palabrasClave:get('PALABRAS').split(',').map(p=>p.trim()).filter(Boolean),
+    capitulos, notasNarrador:get('NOTAS'), glosario,
+    nivelMCER:state.cefrLevel, genero:state.genre, tono:state.tones.join(', '),
+    publico:state.audience, duracionEstimada:state.durationMin };
+}
+
+// ── Parser JSON (cuento) ──
+function parseStoryJSON(text) {
+  let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+  const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
+  if (s===-1||e===-1) return null;
+  clean = clean.substring(s, e+1);
+  // Intentos: directo, escapar saltos, cerrar truncado
+  const attempts = [
+    ()=> JSON.parse(clean),
+    ()=> JSON.parse(escapeNewlines(clean)),
+    ()=> { const c=closeJSON(clean); return c?JSON.parse(escapeNewlines(c)):null; }
+  ];
+  for (const fn of attempts) { try { const r=fn(); if(r) return r; } catch(e){} }
+  return null;
+}
+
+// ── Parser texto plano (ejercicios) ──
+function parseExercisesText(text) {
+  const ejercicios = [];
+  const bloques = text.split('##EJERCICIO##').slice(1);
+  for (const bloque of bloques) {
+    const f = (c) => { const m=bloque.match(new RegExp(`^${c}:\\s*(.+)$`,'im')); return m?m[1].trim():''; };
+    const items = [];
+    const itemsRaw = (bloque.match(/##ITEMS##\s*([\s\S]*?)(?=##NOTAS_PROFE##|##FIN_EJERCICIO##|$)/i)||[])[1]||'';
+    for (const ib of itemsRaw.split('---ITEM---').filter(s=>s.trim())) {
+      const fi = (c) => { const m=ib.match(new RegExp(`^${c}:\\s*(.+)$`,'im')); return m?m[1].trim():''; };
+      const fmt=fi('FORMATO'), preg=fi('PREGUNTA'), resp=fi('RESPUESTA'), expl=fi('EXPLICACION');
+      if (!preg&&!fi('CONTENIDO')) continue;
+      if (fmt==='opcion_multiple') items.push({tipo:'opcion_multiple',pregunta:preg,opciones:fi('OPCIONES').split('|').map(o=>o.trim()).filter(Boolean),respuesta:resp,explicacion:expl});
+      else if (fmt==='verdadero_falso') items.push({tipo:'verdadero_falso',afirmacion:preg,respuesta:resp,justificacion:expl});
+      else if (fmt==='completar') items.push({tipo:'completar',pregunta:preg,respuestaModelo:resp});
+      else if (fmt==='info') items.push({tipo:'info',contenido:preg||fi('CONTENIDO')});
+      else items.push({tipo:'abierta',pregunta:preg,respuestaModelo:resp});
+    }
+    if (f('TIPO')||f('TITULO')) ejercicios.push({tipo:f('TIPO'),icono:f('ICONO'),titulo:f('TITULO'),instrucciones:f('INSTRUCCIONES'),items,notasProfesor:(bloque.match(/##NOTAS_PROFE##\s*([\s\S]*?)(?=##FIN_EJERCICIO##|$)/i)||[])[1]?.trim()||''});
+  }
+  return ejercicios.length>0?{nivelMCER:state.cefrLevel,tituloBase:state.story?.titulo||'',ejercicios}:null;
+}
+
+// ── Parser JSON (ejercicios) ──
+function parseExercisesJSON(text) {
+  let clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+  const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
+  if (s===-1||e===-1) return null;
+  clean = clean.substring(s, e+1);
+  const attempts = [
+    ()=> JSON.parse(clean),
+    ()=> JSON.parse(escapeNewlines(clean)),
+    ()=> { const c=closeJSON(clean); return c?JSON.parse(escapeNewlines(c)):null; }
+  ];
+  for (const fn of attempts) { try { const r=fn(); if(r&&r.ejercicios) return r; } catch(e){} }
+  return null;
+}
+
+// ── Helpers ──
+function escapeNewlines(json) {
+  let r='', inStr=false, esc=false;
+  for (let i=0;i<json.length;i++) {
+    const c=json[i];
+    if (esc){esc=false;r+=c;continue;}
+    if (c==='\\'&&inStr){esc=true;r+=c;continue;}
+    if (c==='"'){inStr=!inStr;r+=c;continue;}
+    if (inStr){
+      if(c==='\n'){r+='\\n';continue;}
+      if(c==='\r'){r+='\\r';continue;}
+      if(c==='\t'){r+='\\t';continue;}
+      if(c.charCodeAt(0)<32)continue;
+    }
+    r+=c;
+  }
+  return r;
+}
+function closeJSON(json) {
+  let inStr=false,esc=false,last=-1; const stack=[];
+  for (let i=0;i<json.length;i++) {
+    const c=json[i];
+    if(esc){esc=false;continue;} if(c==='\\'&&inStr){esc=true;continue;}
+    if(c==='"'){inStr=!inStr;continue;} if(inStr)continue;
+    if(c==='{'||c==='[')stack.push(c);
+    if(c==='}'||c===']'){stack.pop();if(!stack.length)last=i;}
+  }
+  if(last>0)return json.substring(0,last+1);
+  if(stack.length)return json+stack.reverse().map(c=>c==='{'?'}':']').join('');
+  return null;
+}
 async function generateStory() {
   const key = getApiKey();
   if (!key) { showToast('⚠️ Introduce tu API key de Anthropic primero','error'); return; }
@@ -804,7 +932,7 @@ async function generateStory() {
     console.log('STOP REASON:', data.stop_reason);
     console.log('RAW (primeros 800 chars):', text.substring(0, 800));
     console.log('RAW (últimos 300 chars):', text.substring(text.length - 300));
-    const parsed = parseStoryText(text);
+    const parsed = parseStoryResponse(text);
     if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.story = parsed;
     renderStory(parsed);
@@ -854,7 +982,7 @@ async function generateExercises() {
     console.log('EX STOP REASON:', data.stop_reason);
     console.log('EX RAW (primeros 800):', text.substring(0,800));
     console.log('EX RAW (últimos 300):', text.substring(text.length-300));
-    const parsed = parseExercisesText(text);
+    const parsed = parseExercisesResponse(text);
     if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
     state.exercises = parsed;
     renderExercises(parsed);
