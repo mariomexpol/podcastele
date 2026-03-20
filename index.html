@@ -710,21 +710,21 @@ Responde EXACTAMENTE con este formato de texto plano, usando los delimitadores i
 ##FIN##`;
 }
 
-function buildExercisesPrompt() {
-  const checked = [...document.querySelectorAll('.ex-check:checked')].map(c=>c.value);
+function buildExercisesPrompt(tiposGrupo) {
+  const checked = tiposGrupo || [...document.querySelectorAll('.ex-check:checked')].map(c=>c.value);
   const storyText = state.story.capitulos.map(c=>`${c.titulo}:\n${c.contenido}`).join('\n\n');
   const excerpt = storyText.substring(0, 2500);
 
   const instrucciones = {
-    comprension: '3 preguntas de opción múltiple (a/b/c/d) + 2 preguntas abiertas + 2 verdadero/falso',
-    vocabulario: '5 palabras del cuento, cada una con: definición + oración de ejemplo + ejercicio de completar (frase con ___)',
-    gramatica: '5 ejercicios de completar o elegir la forma correcta, con explicación breve de la regla',
-    expresiones: '3 expresiones del cuento: significado + ejemplo de uso',
-    pronunciacion: '5 palabras difíciles con su pronunciación fonética y regla',
-    conversacion: '5 preguntas abiertas para debatir en clase, de más simple a más compleja',
-    escritura: '3 consignas de escritura creativa basadas en el cuento',
-    dictado: 'Un párrafo de 60-80 palabras del cuento para dictar + instrucciones para el docente',
-    cultura: '3 elementos culturales del cuento con explicación + 2 preguntas de reflexión'
+    comprension: '3 preguntas opción múltiple (4 opciones) + 2 preguntas abiertas + 1 verdadero/falso',
+    vocabulario: '4 palabras del cuento: definición breve + frase con ___',
+    gramatica: '4 ejercicios de completar con la forma correcta + explicación de la regla en 1 línea',
+    expresiones: '3 expresiones: significado en 1 línea + ejemplo',
+    pronunciacion: '4 palabras difíciles: pronunciación fonética + regla breve',
+    conversacion: '4 preguntas abiertas para debatir, de simple a compleja',
+    escritura: '2 consignas de escritura creativa basadas en el cuento',
+    dictado: 'Párrafo de 50-60 palabras del cuento para dictar',
+    cultura: '2 elementos culturales con explicación breve + 1 pregunta de reflexión'
   };
 
   const tiposSeleccionados = checked.map(c => `- ${c.toUpperCase()}: ${instrucciones[c]||''}`).join('\n');
@@ -1042,32 +1042,54 @@ async function generateExercises() {
   document.getElementById('loadingExercises').style.display='block';
   document.getElementById('btnGenEx').disabled=true;
 
+  const checked = [...document.querySelectorAll('.ex-check:checked')].map(c=>c.value);
+  if (checked.length === 0) {
+    showToast('Selecciona al menos un tipo de ejercicio','error');
+    document.getElementById('loadingExercises').style.display='none';
+    document.getElementById('btnGenEx').disabled=false;
+    return;
+  }
+
+  // Dividir en grupos de máximo 3 para no superar el límite de tokens
+  const grupos = [];
+  for (let i=0; i<checked.length; i+=3) grupos.push(checked.slice(i,i+3));
+
+  const allEjercicios = [];
+
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:8000,
-        messages:[{role:'user',content:buildExercisesPrompt()}]
-      })
-    });
-    if (!resp.ok) { const e=await resp.json(); throw new Error(e.error?.message||`HTTP ${resp.status}`); }
-    const data = await resp.json();
-    const text = data.content?.map(b=>b.text||'').join('') || '';
-    console.log('EX STOP REASON:', data.stop_reason);
-    console.log('EX RAW (primeros 800):', text.substring(0,800));
-    console.log('EX RAW (últimos 300):', text.substring(text.length-300));
-    const parsed = parseExercisesResponse(text);
-    if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
-    state.exercises = parsed;
-    renderExercises(parsed);
-    showToast('✅ Ejercicios generados');
+    for (let g=0; g<grupos.length; g++) {
+      document.getElementById('loadingMsg') && (document.getElementById('loadingMsg').textContent =
+        grupos.length > 1 ? `Generando ejercicios (${g+1} de ${grupos.length})...` : 'Generando ejercicios...');
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key':key,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:8000,
+          messages:[{role:'user',content:buildExercisesPrompt(grupos[g])}]
+        })
+      });
+      if (!resp.ok) { const e=await resp.json(); throw new Error(e.error?.message||`HTTP ${resp.status}`); }
+      const data = await resp.json();
+      const text = data.content?.map(b=>b.text||'').join('') || '';
+      console.log(`EX GRUPO ${g+1} STOP REASON:`, data.stop_reason);
+      console.log(`EX GRUPO ${g+1} RAW (primeros 800):`, text.substring(0,800));
+      console.log(`EX GRUPO ${g+1} RAW (últimos 300):`, text.substring(text.length-300));
+      const parsed = parseExercisesResponse(text);
+      if (parsed?.ejercicios?.length) allEjercicios.push(...parsed.ejercicios);
+    }
+
+    if (allEjercicios.length === 0) throw new Error('No se pudieron generar ejercicios. Intenta con menos tipos seleccionados.');
+
+    state.exercises = { nivelMCER:state.cefrLevel, tituloBase:state.story.titulo, ejercicios:allEjercicios };
+    renderExercises(state.exercises);
+    showToast(`✅ ${allEjercicios.length} sección(es) de ejercicios generadas`);
   } catch(e) {
     console.error(e);
     document.getElementById('emptyExercises').style.display='flex';
