@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<!-- PodcastELE v4.0 -->
+<!-- PodcastELE v4.1 -->
 <title>PodcastELE — Generador de Cuentos para Podcasts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1354,20 +1354,41 @@ function buildPrintHTML() {
   // Exercises
   if (document.getElementById('expExercises').checked && state.exercises) {
     html += `<div class="page-break"></div><h2>Ejercicios de Español — Nivel ${state.exercises.nivelMCER||state.cefrLevel}</h2>`;
+    const showAnswers = document.getElementById('expAnswers').checked;
     (state.exercises.ejercicios||[]).forEach(ex => {
       html += `<div class="exercise-block"><h3>${ex.icono||''} ${esc(ex.titulo||'')}</h3>`;
       html += `<p style="font-style:italic;font-size:.9em">${esc(ex.instrucciones||'')}</p>`;
-      (ex.items||[]).forEach((item,i)=>{
-        const q = item.pregunta||item.afirmacion||item.enunciado||'';
-        html += `<div class="exercise-item"><strong>${i+1}. ${esc(q)}</strong>`;
-        if (item.opciones) html += `<ul>${item.opciones.map(o=>`<li>${esc(o)}</li>`).join('')}</ul>`;
-        if (document.getElementById('expAnswers').checked) {
-          const r = item.respuesta||item.respuestaModelo||'';
-          if (r) html += `<div class="answer">✅ ${esc(r)}</div>`;
+      let num = 0;
+      (ex.items||[]).forEach(item => {
+        // Tipo INFO — bloque azul informativo (vocabulario, gramática, etc.)
+        if (item.tipo === 'info') {
+          html += `<div style="background:#e8f0fb;border-left:3px solid #4a6fa5;padding:.6em .9em;margin:.6em 0;font-size:.88em;border-radius:0 4px 4px 0;white-space:pre-wrap">${esc(item.contenido||'')}</div>`;
+          return;
+        }
+        num++;
+        const cleanQ = (q) => (q||'').replace(/^\d+[\.\)]\s*/,'').trim();
+        if (item.tipo === 'opcion_multiple') {
+          html += `<div class="exercise-item"><strong>${num}. ${esc(cleanQ(item.pregunta))}</strong>`;
+          html += `<ul>${(item.opciones||[]).map(o=>`<li>${esc(o)}</li>`).join('')}</ul>`;
+          if (showAnswers && item.respuesta) html += `<div class="answer">✅ ${esc(item.respuesta)}${item.explicacion?' — '+esc(item.explicacion):''}</div>`;
+        } else if (item.tipo === 'verdadero_falso') {
+          html += `<div class="exercise-item"><strong>${num}. ¿Verdadero o Falso? ${esc(cleanQ(item.afirmacion))}</strong>`;
+          if (showAnswers && item.respuesta) html += `<div class="answer">✅ ${esc(item.respuesta)}${item.justificacion?' — '+esc(item.justificacion):''}</div>`;
+        } else if (item.tipo === 'completar') {
+          html += `<div class="exercise-item"><strong>${num}. ${esc(cleanQ(item.pregunta))}</strong>`;
+          if (showAnswers && item.respuestaModelo) html += `<div class="answer">✅ ${esc(item.respuestaModelo)}</div>`;
+        } else {
+          // abierta y genérico
+          const q = cleanQ(item.pregunta||item.afirmacion||item.enunciado||'');
+          html += `<div class="exercise-item"><strong>${num}. ${esc(q)}</strong>`;
+          if (showAnswers) {
+            const r = item.respuestaModelo||item.respuesta||'';
+            if (r) html += `<div class="answer">✅ ${esc(r)}</div>`;
+          }
         }
         html += `</div>`;
       });
-      if (document.getElementById('expAnswers').checked && ex.notasProfesor) {
+      if (showAnswers && ex.notasProfesor) {
         html += `<p style="font-size:.85em;background:#e8f5e8;padding:.5em;border-radius:4px"><strong>Notas docente:</strong> ${esc(ex.notasProfesor)}</p>`;
       }
       html += `</div>`;
@@ -1417,14 +1438,21 @@ function copyExercises() {
   if (!state.exercises) return;
   let text = '';
   (state.exercises.ejercicios||[]).forEach(ex=>{
-    text += `${ex.titulo}\n${ex.instrucciones}\n\n`;
-    (ex.items||[]).forEach((item,i)=>{
-      const q = item.pregunta||item.afirmacion||'';
-      text += `${i+1}. ${q}\n`;
+    text += `\n${ex.icono||''} ${ex.titulo||''}\n${ex.instrucciones||''}\n\n`;
+    let num = 0;
+    (ex.items||[]).forEach(item=>{
+      if (item.tipo==='info') { text += `ℹ️ ${item.contenido||''}\n\n`; return; }
+      num++;
+      const cleanQ = (q) => (q||'').replace(/^\d+[\.\)]\s*/,'').trim();
+      const q = cleanQ(item.pregunta||item.afirmacion||'');
+      text += `${num}. ${q}\n`;
       if (item.opciones) item.opciones.forEach(o=>text+=`   ${o}\n`);
+      const r = item.respuesta||item.respuestaModelo||'';
+      if (r) text += `   ✅ ${r}\n`;
       text += '\n';
     });
-    text += '\n---\n\n';
+    if (ex.notasProfesor) text += `📌 Notas: ${ex.notasProfesor}\n`;
+    text += '\n---\n';
   });
   navigator.clipboard.writeText(text).then(()=>showToast('📋 Ejercicios copiados'));
 }
