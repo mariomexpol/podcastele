@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<!-- PodcastELE v3.0 -->
+<!-- PodcastELE v4.0 -->
 <title>PodcastELE — Generador de Cuentos para Podcasts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -515,11 +515,6 @@ input[type=range]::-webkit-slider-thumb:hover{background:#e0aa62}
           <h3>Copiar texto</h3>
           <p>Copia todo el contenido al portapapeles para pegarlo en cualquier aplicación.</p>
         </div>
-        <div class="export-card" onclick="exportJSON()">
-          <div class="ec-icon">🗂️</div>
-          <h3>Guardar JSON</h3>
-          <p>Guarda los datos estructurados para reutilizarlos o archivar tus episodios.</p>
-        </div>
       </div>
 
       <div id="noContentExport" style="margin-top:1rem;display:none">
@@ -677,36 +672,39 @@ function buildStoryPrompt() {
   const epNum     = document.getElementById('episodioNum').value;
   const seriePrev = document.getElementById('seriePrevio').value;
 
-  return `Eres un escritor literario experto en ELE. Crea un cuento para podcast de español con estas especificaciones:
+  return `Eres un escritor literario experto en ELE. Crea un cuento para podcast de español.
 
 GÉNERO: ${state.genre.replace('_',' ')} | TONO: ${tones} | PÚBLICO: ${state.audience}
 NIVEL MCER ${state.cefrLevel}: ${CEFR_DESCRIPTIONS[state.cefrLevel]}
 DURACIÓN: ${dur} minutos (~${words} palabras)
 ${tema ? 'TEMA: '+tema : ''}${prot ? '\nPROTAGONISTA: '+prot : ''}${amb ? '\nAMBIENTACIÓN: '+amb : ''}${var_ ? '\nVARIEDAD: '+var_ : ''}${serieMode ? `\nSERIE: "${serieNom}" Episodio ${epNum}` : ''}${serieMode && seriePrev ? '\nANTERIOR: '+seriePrev : ''}${extra ? '\nINSTRUCCIONES: '+extra : ''}
 
-Responde EXACTAMENTE con este formato de texto plano, usando los delimitadores indicados:
+IMPORTANTE: Responde SOLO con el formato de texto que se muestra abajo.
+NO uses JSON. NO uses llaves {}. NO uses corchetes []. NO uses comillas de JSON.
+Usa EXACTAMENTE estos delimitadores ##:
 
 ##TITULO##
-(escribe aquí el título)
+El título del cuento aquí
 ##SUBTITULO##
-(escribe aquí el subtítulo, puede estar vacío)
+El subtítulo aquí (opcional)
 ##SINOPSIS##
-(escribe aquí la sinopsis de 2-3 frases)
+La sinopsis de 2-3 frases aquí
 ##PALABRAS##
-(escribe aquí las palabras clave separadas por comas)
+palabra1, palabra2, palabra3, palabra4
 ##CAPITULO_1##
-(título del capítulo 1)
+Título del primer capítulo
 ##TEXTO_1##
-(texto completo del capítulo 1)
+Aquí va el texto completo del primer capítulo. Puede tener varios párrafos.
+Diálogos, descripciones, todo el contenido narrativo va aquí.
 ##CAPITULO_2##
-(título del capítulo 2)
+Título del segundo capítulo
 ##TEXTO_2##
-(texto completo del capítulo 2)
-(añade más capítulos si es necesario: ##CAPITULO_3##, ##TEXTO_3##, etc.)
+Texto completo del segundo capítulo...
 ##NOTAS##
-(notas breves para el narrador del podcast: pausas, énfasis, velocidad)
+Notas breves para el narrador: pausas, énfasis, velocidad de lectura.
 ##GLOSARIO##
-(una palabra por línea con este formato: palabra|definición en español)
+palabra1|definición de la palabra 1
+palabra2|definición de la palabra 2
 ##FIN##`;
 }
 
@@ -737,28 +735,47 @@ ${excerpt}${storyText.length > 2500 ? '\n[continúa...]' : ''}
 EJERCICIOS A CREAR:
 ${tiposSeleccionados}
 
-Usa EXACTAMENTE este formato de texto plano:
+IMPORTANTE: Responde SOLO con el formato de texto que se muestra abajo.
+NO uses JSON. NO uses llaves {}. NO uses corchetes []. NO uses comillas de JSON.
+Usa EXACTAMENTE estos delimitadores:
 
 ##EJERCICIO##
-TIPO: (nombre del tipo: comprension / vocabulario / gramatica / etc.)
-ICONO: (un emoji apropiado)
-TITULO: (título del ejercicio)
-INSTRUCCIONES: (instrucciones claras para el alumno)
+TIPO: comprension
+ICONO: 📝
+TITULO: Comprensión del texto
+INSTRUCCIONES: Lee el cuento y responde las preguntas.
 ##ITEMS##
 ---ITEM---
-FORMATO: (opcion_multiple / abierta / verdadero_falso / completar / info)
-PREGUNTA: (la pregunta o enunciado)
-OPCIONES: a) ... | b) ... | c) ... | d) ...  (solo para opcion_multiple)
-RESPUESTA: (la respuesta correcta o modelo)
-EXPLICACION: (explicación breve)
+FORMATO: opcion_multiple
+PREGUNTA: ¿Dónde vive el protagonista?
+OPCIONES: a) En Madrid | b) En Barcelona | c) En Sevilla | d) En Valencia
+RESPUESTA: b
+EXPLICACION: El texto dice claramente que vive en Barcelona.
 ---ITEM---
-(repite para cada ítem)
+FORMATO: abierta
+PREGUNTA: ¿Cómo describe el autor el paisaje?
+RESPUESTA: El alumno debe mencionar los elementos naturales del texto.
+EXPLICACION: Respuesta libre valorando vocabulario del cuento.
+---ITEM---
+FORMATO: verdadero_falso
+PREGUNTA: El protagonista tiene tres hermanos.
+RESPUESTA: Falso
+EXPLICACION: El texto dice que tiene dos hermanos.
+---ITEM---
+FORMATO: completar
+PREGUNTA: María ___ (vivir) en una casa pequeña cerca del mar.
+RESPUESTA: vive
+EXPLICACION: Presente de indicativo, tercera persona singular.
+---ITEM---
+FORMATO: info
+PREGUNTA: VOCABULARIO: "melancólico" significa triste y pensativo. Ejemplo: "El cielo melancólico anunciaba lluvia."
+RESPUESTA: 
+EXPLICACION: 
 ##NOTAS_PROFE##
-(notas metodológicas para el docente)
+Notas metodológicas para el docente aquí.
 ##FIN_EJERCICIO##
 
-(repite ##EJERCICIO## ... ##FIN_EJERCICIO## para cada tipo seleccionado)
-
+Ahora crea los ejercicios reales siguiendo EXACTAMENTE este formato para los tipos: ${checked.join(', ')}
 ##FIN##`;
 }
 
@@ -1164,7 +1181,10 @@ function renderStory(s) {
 function renderExercises(data) {
   document.getElementById('exLevel').textContent = data.nivelMCER||state.cefrLevel;
   const container = document.getElementById('exercisesContent');
-  
+
+  // Elimina numeración inicial que venga en la pregunta (ej. "1. ¿Qué...?" → "¿Qué...?")
+  const cleanQ = (q) => (q||'').replace(/^\d+[\.\)]\s*/,'').trim();
+
   const exHTML = (data.ejercicios||[]).map(ex=>{
     let itemNum = 0;
     const itemsHTML = (ex.items||[]).map(item=>{
@@ -1173,31 +1193,30 @@ function renderExercises(data) {
       } else if (item.tipo==='opcion_multiple') {
         itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
+          <div class="q">${itemNum}. ${esc(cleanQ(item.pregunta))}</div>
           <div class="options">${(item.opciones||[]).map(o=>`<div class="opt">${esc(o)}</div>`).join('')}</div>
           ${item.respuesta||item.explicacion ? `<details style="margin-top:.5rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta||'')} ${item.explicacion?'— '+esc(item.explicacion):''}</p></details>` : ''}
         </div>`;
       } else if (item.tipo==='abierta') {
         itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
+          <div class="q">${itemNum}. ${esc(cleanQ(item.pregunta))}</div>
           ${item.respuestaModelo ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Respuesta modelo</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">💡 ${esc(item.respuestaModelo)}</p></details>` : ''}
         </div>`;
       } else if (item.tipo==='verdadero_falso') {
         itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${itemNum}. ¿Verdadero o Falso? ${esc(item.afirmacion||'')}</div>
+          <div class="q">${itemNum}. ¿Verdadero o Falso? ${esc(cleanQ(item.afirmacion))}</div>
           ${item.respuesta ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuesta)} ${item.justificacion?'— '+esc(item.justificacion):''}</p></details>` : ''}
         </div>`;
       } else if (item.tipo==='completar') {
         itemNum++;
         return `<div class="exercise-item">
-          <div class="q">${itemNum}. ${esc(item.pregunta||'')}</div>
+          <div class="q">${itemNum}. ${esc(cleanQ(item.pregunta))}</div>
           ${item.respuestaModelo ? `<details style="margin-top:.4rem"><summary style="font-size:.73rem;color:var(--text3);cursor:pointer">Ver respuesta</summary><p style="font-size:.78rem;color:var(--green);margin-top:.3rem;padding-left:.5rem">✅ ${esc(item.respuestaModelo)}</p></details>` : ''}
         </div>`;
       } else {
-        // Fallback genérico — muestra lo que haya
-        const q = item.pregunta||item.afirmacion||item.enunciado||item.actividad||item.contenido||'';
+        const q = cleanQ(item.pregunta||item.afirmacion||item.enunciado||item.actividad||item.contenido||'');
         const r = item.respuesta||item.respuestaModelo||item.explicacion||item.justificacion||'';
         if (!q && !r) return '';
         itemNum++;
