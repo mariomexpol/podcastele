@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<!-- PodcastELE v4.1 -->
+<!-- PodcastELE v4.2 -->
 <title>PodcastELE — Generador de Cuentos para Podcasts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1003,40 +1003,52 @@ async function generateStory() {
     msgIdx++;
   },2500);
 
-  const words = state.durationMin * WPM;
-  const maxTokens = 8000;
+  // Cuentos > 20 min se generan en dos partes para no superar el límite de tokens
+  const dur = state.durationMin;
+  const necesitaPartes = dur > 20;
+  const partes = necesitaPartes ? 2 : 1;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens: maxTokens,
-        messages:[{role:'user',content:buildStoryPrompt()}]
-      })
-    });
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    let storyFinal = null;
+
+    if (!necesitaPartes) {
+      // ── Cuento corto: una sola llamada ──
+      const text = await llamarAPI(key, buildStoryPrompt());
+      storyFinal = parseStoryResponse(text);
+      if (!storyFinal) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
+
+    } else {
+      // ── Cuento largo: dos llamadas ──
+      document.getElementById('loadingMsg').textContent = 'Generando primera parte del cuento...';
+      const textParte1 = await llamarAPI(key, buildStoryPromptParte(1, 2));
+      const parte1 = parseStoryResponse(textParte1);
+      if (!parte1) throw new Error('Error en la primera parte. Intenta de nuevo.');
+
+      document.getElementById('loadingMsg').textContent = 'Generando segunda parte del cuento...';
+      const textParte2 = await llamarAPI(key, buildStoryPromptParte(2, 2, parte1));
+      const parte2 = parseStoryResponse(textParte2);
+
+      // Combinar las dos partes
+      storyFinal = { ...parte1 };
+      if (parte2?.capitulos?.length) {
+        storyFinal.capitulos = [...(parte1.capitulos||[]), ...parte2.capitulos.map(c=>({
+          ...c, numero: (parte1.capitulos?.length||0) + c.numero
+        }))];
+      }
+      if (parte2?.glosario?.length) {
+        storyFinal.glosario = [...(parte1.glosario||[]), ...parte2.glosario];
+      }
+      if (parte2?.notasNarrador) {
+        storyFinal.notasNarrador = (parte1.notasNarrador||'') + '\n' + parte2.notasNarrador;
+      }
     }
-    const data = await resp.json();
-    const text = data.content?.map(b=>b.text||'').join('') || '';
-    console.log('STOP REASON:', data.stop_reason);
-    console.log('RAW (primeros 800 chars):', text.substring(0, 800));
-    console.log('RAW (últimos 300 chars):', text.substring(text.length - 300));
-    const parsed = parseStoryResponse(text);
-    if (!parsed) throw new Error('No se pudo procesar la respuesta. Intenta de nuevo.');
-    state.story = parsed;
-    renderStory(parsed);
+
+    state.story = storyFinal;
+    renderStory(storyFinal);
     document.getElementById('btnGenEx').disabled=false;
-    showToast('✅ Cuento generado con éxito');
+    showToast(`✅ Cuento generado${necesitaPartes?' en dos partes':''} con éxito`);
     updateKeyBadge(true);
+
   } catch(e) {
     console.error(e);
     document.getElementById('emptyStory').style.display='flex';
@@ -1045,6 +1057,119 @@ async function generateStory() {
     clearInterval(interval);
     document.getElementById('loadingStory').style.display='none';
     document.getElementById('btnGenStory').disabled=false;
+  }
+}
+
+async function llamarAPI(key, prompt) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:8000,
+      messages:[{role:'user',content:prompt}]
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error?.message || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  const text = data.content?.map(b=>b.text||'').join('') || '';
+  console.log('STOP REASON:', data.stop_reason);
+  console.log('RAW inicio:', text.substring(0,400));
+  console.log('RAW final:', text.substring(text.length-200));
+  return text;
+}
+
+function buildStoryPromptParte(parte, totalPartes, parteAnterior) {
+  const tema = document.getElementById('tema').value.trim();
+  const prot = document.getElementById('protagonista').value.trim();
+  const amb  = document.getElementById('ambientacion').value.trim();
+  const extra= document.getElementById('instrucciones').value.trim();
+  const var_ = document.getElementById('variedad').value;
+  const tones= state.tones.join(', ');
+  const dur  = state.durationMin;
+  const words= dur * WPM;
+  const mitad = Math.round(words / 2);
+  const serieMode = document.getElementById('serieMode').checked;
+  const serieNom  = document.getElementById('serieNombre').value;
+  const epNum     = document.getElementById('episodioNum').value;
+
+  if (parte === 1) {
+    return `Eres un escritor literario experto en ELE. Vas a crear un cuento LARGO en dos partes. Esta es la PARTE 1 de 2.
+
+GÉNERO: ${state.genre.replace('_',' ')} | TONO: ${tones} | PÚBLICO: ${state.audience}
+NIVEL MCER ${state.cefrLevel}: ${CEFR_DESCRIPTIONS[state.cefrLevel]}
+DURACIÓN TOTAL: ${dur} minutos (~${words} palabras en total)
+ESTA PARTE: Primera mitad (~${mitad} palabras, ${Math.round(dur/2)} minutos)
+${tema ? 'TEMA: '+tema : ''}${prot ? '\nPROTAGONISTA: '+prot : ''}${amb ? '\nAMBIENTACIÓN: '+amb : ''}${var_ ? '\nVARIEDAD: '+var_ : ''}${serieMode ? `\nSERIE: "${serieNom}" Episodio ${epNum}` : ''}${extra ? '\nINSTRUCCIONES: '+extra : ''}
+
+IMPORTANTE: NO uses JSON. Usa EXACTAMENTE estos delimitadores:
+
+##TITULO##
+El título del cuento
+##SUBTITULO##
+El subtítulo (opcional)
+##SINOPSIS##
+Sinopsis de 2-3 frases
+##PALABRAS##
+palabra1, palabra2, palabra3
+##CAPITULO_1##
+Título del capítulo 1
+##TEXTO_1##
+Texto completo del capítulo 1...
+##CAPITULO_2##
+Título del capítulo 2
+##TEXTO_2##
+Texto completo del capítulo 2...
+##NOTAS##
+Notas breves para el narrador
+##GLOSARIO##
+palabra1|definición
+palabra2|definición
+##FIN##
+
+Escribe solo la primera mitad de la historia. Termina en un punto narrativo interesante (no en cliffhanger brusco, sino en un momento de pausa natural). La segunda parte continuará desde aquí.`;
+
+  } else {
+    const resumen = parteAnterior ? `
+TÍTULO: ${parteAnterior.titulo}
+SINOPSIS: ${parteAnterior.sinopsis}
+ÚLTIMO CAPÍTULO: ${parteAnterior.capitulos?.slice(-1)[0]?.titulo} — ${parteAnterior.capitulos?.slice(-1)[0]?.contenido?.substring(0,300)}...` : '';
+
+    return `Eres un escritor literario experto en ELE. Continúas un cuento LARGO. Esta es la PARTE 2 de 2 (la continuación y el final).
+
+GÉNERO: ${state.genre.replace('_',' ')} | TONO: ${tones} | PÚBLICO: ${state.audience}
+NIVEL MCER ${state.cefrLevel}: ${CEFR_DESCRIPTIONS[state.cefrLevel]}
+DURACIÓN DE ESTA PARTE: ~${mitad} palabras, ~${Math.round(dur/2)} minutos
+
+LO QUE OCURRIÓ EN LA PARTE 1:${resumen}
+
+IMPORTANTE: NO uses JSON. Continúa con el MISMO formato de delimitadores. Los capítulos aquí empiezan desde el 1 (se numerarán automáticamente al unir las partes). Escribe el desarrollo final y el desenlace de la historia.
+
+##TITULO##
+(mismo título que la parte 1)
+##SUBTITULO##
+
+##SINOPSIS##
+
+##PALABRAS##
+
+##CAPITULO_1##
+Título del siguiente capítulo
+##TEXTO_1##
+Continuación de la historia...
+##NOTAS##
+Notas para el narrador (segunda parte)
+##GLOSARIO##
+palabra3|definición
+##FIN##`;
   }
 }
 
